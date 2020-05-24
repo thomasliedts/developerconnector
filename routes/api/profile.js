@@ -12,7 +12,7 @@ const User = require('../../models/User');
 // @acc   Private
 router.get('/me', auth, async (req, res) => {
   try {
-    const profile = await await Profile.findOne({
+    const profile = await Profile.findOne({
       user: req.user.id,
     }).populate('userDevCo', ['name', 'avatar']);
     if (!profile) {
