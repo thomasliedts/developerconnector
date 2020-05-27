@@ -6,6 +6,7 @@ const request = require('request');
 const config = require('config');
 const Profile = require('../../models/Profile');
 const User = require('../../models/User');
+const Post = require('../../models/Post');
 
 // @route GET api/profile/me
 // @desc  Get current user profile
@@ -60,18 +61,18 @@ router.post(
     } = req.body;
 
     // Build profile object
-    const profileFields = {};
-    profileFields.user = req.user.id;
-
-    if (company) profileFields.company = company;
-    if (website) profileFields.website = website;
-    if (location) profileFields.location = location;
-    if (bio) profileFields.bio = bio;
-    if (status) profileFields.status = status;
-    if (githubusername) profileFields.githubusername = githubusername;
-    if (skills) {
-      profileFields.skills = skills.split(',').map((skill) => skill.trim());
-    }
+    const profileFields = {
+      user: req.user.id,
+      company,
+      location,
+      website: website === '' ? '' : normalize(website, { forceHttps: true }),
+      bio,
+      skills: Array.isArray(skills)
+        ? skills
+        : skills.split(',').map((skill) => ' ' + skill.trim()),
+      status,
+      githubusername,
+    };
 
     // Build social object
     profileFields.social = {};
@@ -150,7 +151,8 @@ router.get('/user/:user_id', async (req, res) => {
 // @acc   Private
 router.delete('/', auth, async (req, res) => {
   try {
-    // @Todo - remove users posts
+    // Remove user posts
+    await Post.deleteMany({ user: req.user.id });
     // Remove profile
     await Profile.findOneAndRemove({ user: req.user.id });
     // Remove user
@@ -251,13 +253,16 @@ router.put(
       check('school', 'School is required').not().isEmpty(),
       check('degree', 'Degree is required').not().isEmpty(),
       check('fieldofstudy', 'Field of study is required').not().isEmpty(),
-      check('from', 'From date is required').not().isEmpty(),
+      check('from', 'From date is required and needs to be from the past')
+        .not()
+        .isEmpty()
+        .custom((value, { req }) => (req.body.to ? value < req.body.to : true)),
     ],
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: error.array() });
+      return res.status(400).json({ errors: errors.array() });
     }
 
     const {
